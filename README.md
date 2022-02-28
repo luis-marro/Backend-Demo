@@ -1,4 +1,7 @@
 # Backend Task - Luis Marroquin
+
+# Testing the APIs Locally 
+###You can run the app at ```http://localhost:3001/api-docs``` to test out the APIs
   
 
 💫 Welcome! 🎉
@@ -123,3 +126,4 @@ When you have finished the assignment, create a github repository and send us th
   
 
 Thank you and good luck! 🙏
+
