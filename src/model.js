@@ -83,8 +83,8 @@ Contract.hasMany(Job)
 Job.belongsTo(Contract)
 
 module.exports = {
-  sequelize,
-  Profile,
-  Contract,
-  Job
+    sequelize,
+    Profile,
+    Contract,
+    Job
 };
