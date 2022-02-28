@@ -9,6 +9,7 @@ app.set('sequelize', sequelize);
 app.set('models', sequelize.models);
 const contractsRouter = express.Router();
 const jobsRouter = express.Router();
+const adminRouter = express.Router();
 
 /**
  *
@@ -118,7 +119,91 @@ app.post('/balances/deposit/:userId', getProfile, async (req, res) => {
     res.status(200).json({message: 'Successfully updated the user\'s balance'});
 })
 
+adminRouter.get('/best-profession',async (req, res) => {
+    const {Job, Contract, Profile} = app.get('models');
+    const startDate = new Date(req.query.start).toISOString();
+    const endDate = new Date(req.query.end).toISOString();
+    console.log(startDate, endDate);
+    const filter = {
+        attributes: ['id', 'ContractorId'],
+        group: ['Contract.id'],
+        include: [
+            {
+                model: Job,
+                required: true,
+                attributes: [[sequelize.fn('SUM', sequelize.col('price')), 'total']],
+                group: ['Contract.ContractorId'],
+                where: {
+                    updatedAt: {
+                        [Op.between]: [startDate, endDate]
+                    },
+                    paid: true
+                }
+            }
+        ]
+    }
+    const contracts = await Contract.findAll(filter);
+    const contractors = {};
+    let maxContractor = contracts[0].ContractorId;
+    contracts.forEach(contractTotal => {
+        if(contractors[contractTotal.ContractorId]) contractors[contractTotal.ContractorId] += contractTotal.Jobs[0].dataValues.total;
+        else contractors[contractTotal.ContractorId] = contractTotal.Jobs[0].dataValues.total;
+        if(contractors[contractTotal.ContractorId] > contractors[maxContractor]) maxContractor = contractTotal.ContractorId;
+    })
+    // Get the profile of the highest earning contractor
+    const profile = await Profile.findOne({attributes: ['profession'], where: {id: maxContractor}});
+    res.status(200).json({profession: profile.profession});
+})
+
+adminRouter.get('/best-clients', async (req, res) => {
+    const {Job, Contract, Profile} = app.get('models');
+    const startDate = new Date(req.query.start).toISOString();
+    const endDate = new Date(req.query.end).toISOString();
+    const limit = req.query.limit? req.query.limit : 2;
+    console.log(startDate, endDate, limit);
+    const filter = {
+        attributes: ['id', 'ClientId'],
+        group: ['Contract.id'],
+        include: [
+            {
+                model: Job,
+                required: true,
+                attributes: [[sequelize.fn('SUM', sequelize.col('price')), 'total']],
+                group: ['Contract.ContractorId'],
+                where: {
+                    updatedAt: {
+                        [Op.between]: [startDate, endDate]
+                    },
+                    paid: true
+                }
+            }
+        ]
+    }
+    const contracts = await Contract.findAll(filter);
+    const clients = {};
+    const sortable = [];
+    contracts.forEach(contractTotal => {
+        if(clients[contractTotal.ClientId]) clients[contractTotal.ClientId] += contractTotal.Jobs[0].dataValues.total;
+        else clients[contractTotal.ClientId] = contractTotal.Jobs[0].dataValues.total;
+    })
+    Object.keys(clients).forEach(key => {
+        sortable.push({ClientId: key, amountPaid: clients[key]});
+    })
+    sortable.sort((a, b) => b.amountPaid - a.amountPaid);
+    const clientsArray = [];
+    const loopLimit = limit > sortable.length? sortable.length : limit;
+    for(let i = 0; i < loopLimit; i++){
+        const profile = await Profile.findOne({attributes: ['firstName', 'lastName'], where: {id: sortable[i].ClientId}});
+        clientsArray.push({
+            id: sortable[i].ClientId,
+            fullName: profile.firstName + ' ' + profile.lastName,
+            paid: sortable[i].amountPaid
+        })
+    }
+    res.status(200).json(clientsArray);
+})
 
 app.use('/contracts', contractsRouter);
 app.use('/jobs', jobsRouter);
+app.use('/admin', adminRouter);
 module.exports = app;
