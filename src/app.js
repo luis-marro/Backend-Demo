@@ -52,17 +52,32 @@ jobsRouter.get('/unpaid', getProfile, async (req, res) => {
 })
 
 jobsRouter.put('/:job_id/pay', getProfile, async (req, res) => {
-    const {Job, Profile} = req.app.get('models');
+    const {Job, Profile, Contract} = req.app.get('models');
     const transaction = await sequelize.transaction({
         isolationLevel: 'SERIALIZABLE'
     })
     try {
         // get the balance of a client
-        const client = await Profile.findOne({where: {id: req.profile.id}}, {transaction});
-        if (client.type !== 'client') return res.status(400).json({message: 'Only a client can pay for a job'});
-        const job = await Job.findOne({where: {id: req.params.job_id}}, {transaction});
-        if (job.paid) return res.status(200).json({message: `The job ${job.description} is already paid for`});
-        if (job.price > client.balance) res.status(422).json({message: 'Cannot complete payment because balance is below payment amount'});
+        const client = await Profile.findOne({where: {id: req.profile.id}, transaction});
+        if (client.type !== 'client') {
+            transaction.commit();
+            return res.status(400).json({message: 'Only a client can pay for a job'});
+        }
+        const job = await Job.findOne({where: {id: req.params.job_id}, transaction});
+        // Check if the job belongs to the client
+        const contract = await Contract.findOne({where: {id: job.ContractId}});
+        if(contract.ClientId !== req.profile.id) {
+            transaction.commit();
+            return res.status(403).json({message: 'You cannot pay for this contract'});
+        }
+        if (job.paid) {
+            transaction.commit();
+            return res.status(200).json({message: `The job ${job.description} is already paid for`});
+        }
+        if (job.price > client.balance) {
+            transaction.commit();
+            return res.status(422).json({message: 'Cannot complete payment because balance is below payment amount'});
+        }
         await Job.update({paid: true}, {where: {id: job.id}, transaction: transaction});
         await Profile.update({balance: client.balance - job.price}, {where: {id: client.id}, transaction: transaction});
         await transaction.commit();
@@ -72,6 +87,35 @@ jobsRouter.put('/:job_id/pay', getProfile, async (req, res) => {
         console.error(error);
         res.status(500).json({message: 'Error Paying for Job'});
     }
+})
+
+app.post('/balances/deposit/:userId', getProfile, async (req, res) => {
+    const {Profile, Job, Contract} = req.app.get('models');
+    if(!req.body.amount) return res.status(400).json({message: 'Please specify the amount for the deposit'});
+    const clientToDeposit = await Profile.findOne({where: {id: req.params.userId}});
+    if(clientToDeposit.type !== 'client') return res.status(422).json({message: 'The specified user is not a Client'});
+    const contractFilter = {
+        where: { // Jobs Filter
+            [Op.or]: [{paid: null}, {paid: false}]
+        },
+        include: [{ // contracts filter
+            model: Contract,
+            required: true,
+            where: {
+                ClientId: req.profile.id,
+                [Op.not]: {status: 'terminated'},
+            }
+        }]
+    }
+    const allJobs = await Job.findAll(contractFilter);
+    let totalDue = 0;
+    allJobs.forEach(job => {
+        totalDue += job.price;
+    })
+    if((totalDue * 0.25) < req.body.amount) return res.status(422).json({message: 'Cannot deposit to client, because specified amount is higher than 25% of your current jobs'})
+    // Update the users balance
+    await Profile.update({balance: clientToDeposit.balance + req.body.amount}, {where: {id: req.params.userId}});
+    res.status(200).json({message: 'Successfully updated the user\'s balance'});
 })
 
 
