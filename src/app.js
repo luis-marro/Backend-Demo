@@ -4,6 +4,8 @@ const {Op} = require('sequelize');
 const {sequelize} = require('./model');
 const {getProfile} = require('./middleware/getProfile');
 const app = express();
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./../swagger.json');
 app.use(bodyParser.json());
 app.set('sequelize', sequelize);
 app.set('models', sequelize.models);
@@ -19,6 +21,7 @@ contractsRouter.get('/:id', getProfile ,async (req, res) =>{
     const {Contract} = req.app.get('models');
     const {id} = req.params;
     const contract = await Contract.findOne({where: {id}});
+    if(!contract) return res.status(404).json({message: 'The requested contract was not found'});
     if(contract.ContractorId !== req.profile.id && contract.ClientId !== req.profile.id) return res.status(403).json({message: 'You do not have access to the requested contract'});
     if(!contract) return res.status(404).end();
     res.json(contract);
@@ -82,7 +85,7 @@ jobsRouter.put('/:job_id/pay', getProfile, async (req, res) => {
         await Job.update({paid: true}, {where: {id: job.id}, transaction: transaction});
         await Profile.update({balance: client.balance - job.price}, {where: {id: client.id}, transaction: transaction});
         await transaction.commit();
-        res.status(200).end();
+        res.status(200).json({message: 'Successfully paid for the job.'});
     }catch (error){
         await transaction.rollback();
         console.error(error);
@@ -113,17 +116,25 @@ app.post('/balances/deposit/:userId', getProfile, async (req, res) => {
     allJobs.forEach(job => {
         totalDue += job.price;
     })
-    if((totalDue * 0.25) < req.body.amount) return res.status(422).json({message: 'Cannot deposit to client, because specified amount is higher than 25% of your current jobs'})
+    if((totalDue * 0.25) < req.body.amount) return res.status(422).json({message: 'Cannot deposit to client, because specified amount is higher than 25% of your current jobs'});
     // Update the users balance
     await Profile.update({balance: clientToDeposit.balance + req.body.amount}, {where: {id: req.params.userId}});
+    // diminish the caller's balance *****Uncomment if required, add IF above
+    // await Profile.update({balance: req.profile.balance - req.body.amount}, {where: {id: req.profile.id}});
     res.status(200).json({message: 'Successfully updated the user\'s balance'});
 })
 
 adminRouter.get('/best-profession',async (req, res) => {
     const {Job, Contract, Profile} = app.get('models');
-    const startDate = new Date(req.query.start).toISOString();
-    const endDate = new Date(req.query.end).toISOString();
-    console.log(startDate, endDate);
+    let startDate;
+    let endDate;
+    try {
+        startDate = new Date(req.query.start).toISOString();
+        endDate = new Date(req.query.end).toISOString();
+    }catch (error){
+        console.error(error);
+        return res.status(400).json({message: 'The passed dates are not in the correct format'});
+    }
     const filter = {
         attributes: ['id', 'ContractorId'],
         group: ['Contract.id'],
@@ -157,8 +168,15 @@ adminRouter.get('/best-profession',async (req, res) => {
 
 adminRouter.get('/best-clients', async (req, res) => {
     const {Job, Contract, Profile} = app.get('models');
-    const startDate = new Date(req.query.start).toISOString();
-    const endDate = new Date(req.query.end).toISOString();
+    let startDate;
+    let endDate;
+    try {
+        startDate = new Date(req.query.start).toISOString();
+        endDate = new Date(req.query.end).toISOString();
+    }catch (error){
+        console.error(error);
+        return res.status(400).json({message: 'The filter dates are not in a correct Date Format'});
+    }
     const limit = req.query.limit? req.query.limit : 2;
     console.log(startDate, endDate, limit);
     const filter = {
@@ -206,4 +224,5 @@ adminRouter.get('/best-clients', async (req, res) => {
 app.use('/contracts', contractsRouter);
 app.use('/jobs', jobsRouter);
 app.use('/admin', adminRouter);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 module.exports = app;

@@ -1,0 +1,222 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "3.0.3",
+    "title": "Backend Home Task Application",
+    "description": "Backend Task for Node JS backend developer",
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "host": "localhost:3001",
+  "basePath": "/",
+  "tags": [
+    {
+      "name": "Contractors / Clients App",
+      "description": "API for Contractors and Clients Platform"
+    }
+  ],
+  "schemes": ["http"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/contracts/{id}": {
+      "get": {
+        "tags": ["Contracts"],
+        "summary": "Get a specific contract by ID. It must belong to the profile calling the API",
+        "parameters": [{
+          "name": "id",
+          "in": "path",
+          "description": "The ID of the contract to get.",
+          "required": true,
+          "type": "integer"
+        }, {
+          "name": "profile_id",
+          "in": "header",
+          "required": true,
+          "type": "integer"
+        }],
+        "responses": {
+          "200": {
+            "description": "Ok"
+          },
+          "401": {
+            "description": "The Profile calling the API does not own the contract."
+          },
+          "404": {
+            "description": "The requested contract does not exist."
+          }
+        }
+      }
+    },
+    "/contracts/": {
+      "get": {
+        "tags": ["Contracts"],
+        "summary": "Get all the contracts that belong to the calling profile",
+        "parameters": [{
+          "name": "profile_id",
+          "in": "header",
+          "required": true,
+          "type": "integer"
+        }],
+        "responses": {
+          "200": {
+            "description": "Ok"
+          },
+          "401": {
+            "description": "The profile ID passed does not exist"
+          }
+        }
+      }
+    },
+    "/jobs/unpaid": {
+      "get": {
+        "tags": ["Jobs"],
+        "summary": "Get all the unpaid jobs for the calling user. Includes only active contracts",
+        "parameters": [{
+          "name": "profile_id",
+          "in": "header",
+          "required": true,
+          "type": "integer"
+        }],
+        "responses": {
+          "200": {
+            "description": "Fetched all the current unpaid jobs"
+          }, "401": {
+            "description": "The passed profile ID does not exist."
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/pay": {
+      "put": {
+        "tags": ["Jobs"],
+        "summary": "Pay for the specified job. A client can only pay if his balance >= the amount to pay. It moves the required amount from client's balance to contractor's balance",
+        "parameters": [{
+          "name": "job_id",
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        },{
+          "name": "profile_id",
+          "in": "header",
+          "required": true,
+          "type": "integer"
+        }],
+        "responses": {
+          "200": {
+            "description": "The Job was already paid for / Successfully paid for the job"
+          },
+          "400": {
+            "description": "Only a client can pay for a job"
+          },
+          "403": {
+            "description": "The requesting user cannot pay for the job because he doesn't own the contract"
+          },
+          "422": {
+            "description": "The client does not have sufficient balance to pay for the job"
+          },
+          "500": {
+            "description": "An error occurred paying for the job."
+          }
+        }
+      }
+    },
+    "/balances/deposit/{userId}": {
+      "post": {
+        "tags": ["Balance"],
+        "summary": "Deposit money into the balance of a client. A Client can't deposit more than 25% of his total jobs to pay. Does NOT remove amount from caller balance",
+        "parameters": [{
+          "name": "userId",
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }, {
+          "name": "profile_id",
+          "in": "header",
+          "required": true,
+          "type": "integer"
+        },{
+          "name": "amount",
+          "in": "body",
+          "required": true,
+          "description": "The amount to transfer",
+          "type": "number"
+        }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Balance was successfully deposited"
+          },
+          "400": {
+            "description": "No amount to deposit was provided"
+          },
+          "422": {
+            "description": "The specified user is not a client, cannot deposit / The specified amount is > than 25% of unpaid jobs"
+          }
+        }
+      }
+    },
+    "/admin/best-profession": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Returns the profession that earned that earned the most money for any contractor in the query range",
+        "parameters": [{
+          "name": "start",
+          "in": "query",
+          "required": true,
+          "type": "string",
+          "description": "The start date for the filter Format yyyy-mm-dd or ISOString"
+        },{
+          "name": "end",
+          "in": "query",
+          "required": true,
+          "type": "string",
+          "description": "The start date for the filter Format yyyy-mm-dd or ISOString"
+        }],
+        "responses": {
+          "200": {
+            "description": "Returns the profession that earned the most"
+          },
+          "400": {
+            "description": "The query dates filter are not in correct format"
+          }
+        }
+      }
+    },
+    "/admin/best-clients": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Returns the clients that paid the most for the jobs in query time period",
+        "parameters": [{
+          "name": "start",
+          "in": "query",
+          "required": true,
+          "type": "string",
+          "description": "The start date for the filter Format yyyy-mm-dd or ISOString"
+        }, {
+          "name": "end",
+          "in": "query",
+          "required": true,
+          "type": "string",
+          "description": "The start date for the filter Format yyyy-mm-dd or ISOString"
+        }, {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "integer",
+          "description": "The Max amount of results to show. Defaults to 2"
+        }],
+        "responses": {
+          "200": {
+            "description": "List of Highest paying clients"
+          },
+          "400": {
+            "description": "The dates in query string are not in a supported format"
+          }
+        }
+      }
+    }
+  }
+}
